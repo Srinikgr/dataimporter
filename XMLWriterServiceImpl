@@ -1,0 +1,95 @@
+package org.sample.xmlreader.core.services.impl;
+import java.util.HashMap; 
+import java.util.List;
+import java.util.Map;
+import javax.jcr.Node;
+import javax.jcr.RepositoryException;
+import javax.jcr.Session;
+import org.apache.sling.api.resource.LoginException;
+import org.apache.sling.api.resource.ResourceResolver;
+import org.apache.sling.api.resource.ResourceResolverFactory;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
+import org.sample.xmlreader.core.models.Item;
+import org.sample.xmlreader.core.models.ChannelList;
+import org.sample.xmlreader.core.services.XMLWriterService; 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+/**
+* @author Srinivasan
+*/
+@Component(immediate = true, service = XMLWriterService.class) 
+public class XMLWriterServiceImpl implements XMLWriterService {
+// Logger
+private final Logger log = LoggerFactory.getLogger(this.getClass());
+// Injecting ResourceResolverFactory 
+@Reference
+private ResourceResolverFactory resourceResolverFactory;
+// JCR session
+private Session session;
+/**
+* This method writes XML data to the JCR repository
+ */ @Override
+public void writeXMLToJCR(ChannelList channelList, String jcrPath, String from) {
+log.info("Writing XML data to nodes from: {}", from);
+try {
+// Getting the session 
+session = getSession();
+// Getting root node of the CRX repository 
+Node root = session.getRootNode();
+// Getting the reference of the node under which we need to create our nodes 
+Node xmlNode = root.getNode(jcrPath);
+// Parent node of all the children nodes which are represented by individual
+// XML items
+Node xmlDataNode = null;
+// Checks if the source is from XML file and the node is already present
+ if (from.equalsIgnoreCase("file") && !xmlNode.hasNode("xml_url_channels")) { 
+xmlDataNode = xmlNode.addNode("xml_url_channels", "sling:OrderedFolder");
+}
+// Checks if the source is from URL and the node is already present
+if (from.equalsIgnoreCase("url") && !xmlNode.hasNode("xml_url_channels")) { 
+xmlDataNode = xmlNode.addNode("xml_url_channels", "sling:OrderedFolder");
+}
+// Setting the title of the node
+if (xmlDataNode != null) {
+xmlDataNode.setProperty("jcr:title", "ChannelList");
+} else {
+return;
+}
+// Getting the products from 
+ProductList List<Item> items = channelList.getItem();
+// Iterate for each item present in the XML file
+for (Item item: items) {
+Node currentNode = null;
+if (!xmlDataNode.hasNode("guid_" + item.getGuid())) {
+currentNode = xmlDataNode.addNode("guid_" + item.getGuid(), "nt:unstructured");
+} else {
+currentNode = xmlDataNode.getNode("guid_" + item.getGuid());
+}
+// Setting properties of the node 
+currentNode.setProperty("Title", item.getTitle());
+currentNode.setProperty("Desc", item.getDesc());
+currentNode.setProperty("Link", item.getLink()); 
+currentNode.setProperty("Product_URL", item.getProductUrl()); 
+currentNode.setProperty("GUID", item.getGuid()); 
+currentNode.setProperty("Published_Date", item.getPubDate());
+}
+// Saving the changes to JCR session.save();
+} catch (RepositoryException e) { 
+log.error(e.getMessage(), e);
+}
+}
+private Session getSession() { 
+try {
+// Map for service user details
+Map<String, Object> xmlReaderMap = new HashMap<>(); xmlReaderMap.put(ResourceResolverFactory.SUBSERVICE, "xmlReaderSubservice");
+// Getting ResourceResovler 
+ResourceResolver resourceResolver = resourceResolverFactory.getServiceResourceResolver(xmlReaderMap);
+// Getting the session by adapting the 
+resourceResolver session = resourceResolver.adaptTo(Session.class);
+} catch (LoginException e) { 
+log.error(e.getMessage(), e);
+}
+return session;
+}
+}
